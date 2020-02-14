@@ -1,0 +1,193 @@
+---
+- hosts: ubuntuservers
+  gather_facts: no
+  remote_user: cloud_user
+  become: yes
+  become_method: sudo
+  tasks:
+   
+   - name: Update servers first
+     apt:
+       update_cache: yes
+
+
+   - name: Update servers first
+     apt:
+       name: "*"
+       state: latest
+
+
+   - name: Set MySQL root password debconf-get-selections to confirm password entries
+     
+     debconf:
+      name: mysql-server
+      question: mysql-server/root_password
+      value: "{{ mysql_root_password }}"
+      vtype: password
+   
+   - name: Confirm MySQL root password
+     
+     debconf:
+      name: mysql-server
+      question: mysql-server/root_password_again 
+      value: "{{ mysql_root_password }}"
+      vtype: password
+   
+   - name: Install Mysql Server   
+      
+     apt:
+       name: mysql-server
+       update_cache: yes
+       state: present 
+     environment:  
+       DEBIAN_FRONTEND: noninteractive
+   
+   - name: Restart Mysqld
+     service: 
+       name: mysql
+       state: restarted 
+       enabled: yes
+   
+   - name: Install Nginx
+     apt:
+       name: nginx
+       state: latest    
+    
+   - name: Remove apache2 if present
+     apt:
+       name: apache2
+       state: absent    
+   
+   - name: Install Unzip and PHP
+     apt:
+        pkg:       
+        - unzip
+        - php-gd
+        - php-fpm
+        - php-mysql
+        - php-cli
+        - php-curl
+        - php
+        - python-mysqldb
+        - nginx
+        state: present 
+   
+   - name: Configure MySQL for Wordpress db user
+     mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ mysql_root_password }}"
+        priv: '*.*:ALL,GRANT' 
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+   
+   - name: Configure MySQL for Wordpress db
+     mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        
+   - name: Create Wordpress directory
+     file:
+        path: "{{ wordpress_work_dir }}"
+        state: directory
+        recurse: yes
+        owner: www-data
+        group: www-data
+        
+   
+   - name: Download Wordpress zip file
+     get_url:
+        url: "{{ wordpress_url }}"
+        dest: "/tmp"
+
+   - name: Locate downloaded file
+     find:
+       paths: "/tmp"
+       patterns: '*.zip'
+     register: zip_file                                
+
+   - name: Unzip wordpress
+     unarchive:
+       src: "{{ zip_file.files[0].path }}"
+       dest: "/tmp"
+       remote_src: yes
+     
+   - name: list contents
+     shell:
+       cmd: ls "/tmp/wordpress"   
+     register: files_zip
+   
+   - name: Copy unzipped files
+     copy:
+       src: "/tmp/wordpress/{{ item }}"
+       dest: "{{ wordpress_work_dir }}"
+       force: yes
+       directory_mode: yes
+       remote_src: yes
+     with_items:  
+       - "{{ files_zip.stdout_lines }} "
+
+   - name: Cleanup zip file
+     file:
+       path: "{{ zip_file.files[0].path }}"
+       state: absent
+
+   - name: Remove default Nginx files
+     file:
+       path: /etc/nginx/sites-enabled/default
+       state: absent
+
+   - name: Copy bootstrap example.com index file
+     copy:
+       src: example.com
+       dest: /etc/nginx/sites-available/
+       remote_src: no
+
+   - name: Create sym link
+     file:
+       src: /etc/nginx/sites-available/example.com
+       dest: /etc/nginx/sites-enabled/example.com
+       state: link
+   
+   - name: Wordpress configuration
+     copy:
+       src: /var/www/html/example.com/wp-config-sample.php
+       dest: /var/www/html/example.com/wp-config.php        
+       remote_src: yes
+       
+   - name: Wordpress configuration db_name upate
+     replace:
+       path: /var/www/html/example.com/wp-config.php
+       regexp: 'database_name_here'
+       replace: "{{ db_name }}"
+       backup: yes
+   
+   - name: Wordpress configuration db_user upate
+     replace:
+       path: /var/www/html/example.com/wp-config.php
+       regexp: 'username_here'
+       replace: "{{ db_user }}"
+       backup: yes
+   
+   - name: Wordpress configuration db_password upate
+     replace:
+       path: /var/www/html/example.com/wp-config.php
+       regexp: 'password_here'
+       replace: "{{ mysql_root_password }}"
+       backup: yes
+
+   - name: Change ownership
+     file:
+        path: "{{ wordpress_work_dir }}"
+        state: directory
+        recurse: yes
+        owner: www-data
+        group: www-data
+
+   - name: Start NGINX
+     service:
+       name: nginx
+       state: restarted
+       enabled: yes    
