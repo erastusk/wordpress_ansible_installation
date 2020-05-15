@@ -42,7 +42,7 @@
      environment:  
        DEBIAN_FRONTEND: noninteractive
    
-   - name: Restart Mysqld
+   - name: Restart Mysqld.
      service: 
        name: mysql
        state: restarted 
