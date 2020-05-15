@@ -88,7 +88,7 @@
         login_user: root
         login_password: "{{ mysql_root_password }}"
         
-   - name: Create Wordpress directory
+   - name: Create Wordpress directory.
      file:
         path: "{{ wordpress_work_dir }}"
         state: directory
