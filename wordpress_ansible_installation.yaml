@@ -17,7 +17,7 @@
        state: latest
 
 
-   - name: Set MySQL root password debconf-get-selections to confirm password entries
+   - name: Set MySQL root password debconf-get-selections to confirm password entries.
      
      debconf:
       name: mysql-server
